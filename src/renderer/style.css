@@ -1,0 +1,15 @@
+body, html {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background-color: transparent;
+  overflow: hidden;
+}
+
+#app {
+  color: white;
+  font-family: sans-serif;
+  text-align: center;
+  margin-top: 50px;
+}
