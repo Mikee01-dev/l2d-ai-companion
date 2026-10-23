@@ -4,8 +4,8 @@ function createWindow() {
   const win = new BrowserWindow({
     width: 800,
     height: 600,
-    transparent: false,
-    frame: true,
+    transparent: true,
+    frame: false,
     alwaysOnTop: true,
     webPreferences: {
       preload: require('node:path').join(__dirname, '../preload/index.js'),
