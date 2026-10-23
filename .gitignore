@@ -4,5 +4,5 @@ out/
 .DS_Store
 *.log
 
-assets/live2d/*
-!assets/live2d/.gitkeep
+src/renderer/public/assets/live2d/*
+!src/renderer/public/assets/live2d/.gitkeep
