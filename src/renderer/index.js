@@ -1,5 +1,6 @@
 import * as PIXI from 'pixi.js';
 import { Live2DModel } from '@jannchie/pixi-live2d-display/cubism4';
+import { setupInteraction } from './interactions';
 import './style.css';
 
 window.PIXI = PIXI;
@@ -52,7 +53,9 @@ async function loadModel() {
             '/assets/live2d/kei_vowels_pro/runtime/kei_vowels_pro.model3.json'
         );
         app.stage.addChild(model);
-        positionModel();
+        positionModel(); 
+
+        setupInteraction(model, app);
         console.log('Model berhasil di-load!');
     } catch (error) {
         console.error('Gagal load model:', error);
