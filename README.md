@@ -6,7 +6,8 @@ Unlike typical "AI waifu" projects, this companion features a custom-designed ma
 ## Features (Work in Progress)
 - [x] Transparent Electron window (always on top).
 - [x] Project setup with `electron-vite` (dev server & build).
-- [x] Basic renderer with "Hello World" placeholder.
+- [x] PixiJS canvas integrated with transparent background.
+- [x] Animated placeholder (rotating box) to verify rendering.
 - [ ] Custom rigged male chibi model (Half-body).
 - [ ] Mouse tracking (eyes & head follow cursor).
 - [ ] Auto-blink & breathing animation.
@@ -16,7 +17,7 @@ Unlike typical "AI waifu" projects, this companion features a custom-designed ma
 
 ## Tech Stack
 - **Desktop Shell:** Electron + electron-vite
-- **Rendering:** PixiJS v7 + pixi-live2d-display (coming soon)
+- **Rendering:** PixiJS v7 (Live2D integration coming soon)
 - **Model:** Custom Live2D Cubism (Male Chibi)
 - **AI Brain:** [TBD - OpenAI / DeepSeek / Groq]
 
@@ -24,7 +25,7 @@ Unlike typical "AI waifu" projects, this companion features a custom-designed ma
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/username-kamu/l2d-ai-companion.git
+   git clone https://github.com/Mikee01-dev/l2d-ai-companion.git
    cd l2d-ai-companion
    ```
 
@@ -37,7 +38,7 @@ Unlike typical "AI waifu" projects, this companion features a custom-designed ma
    ```bash
    npm run dev
    ```
-   *Note: Currently, the app opens a transparent window with a "Hello World!" placeholder. Live2D rendering will be added in Week 1.*
+   *Note: Currently, the app opens a transparent window with a rotating blue box to test the PixiJS renderer. The Live2D model will be integrated in the next step.*
 
 ## About the Character
 **Mike** is a chibi male companion. He is calm, observant, and occasionally teasing. 
