@@ -1,4 +1,4 @@
-const { app, BrowserWindow } = require('electron')
+const { app, BrowserWindow, screen } = require('electron')
 const path = require('node:path')
 
 function createWindow() {
@@ -17,6 +17,20 @@ function createWindow() {
         backgroundThrottling: false,
     },
   })
+
+    setInterval(() => {
+      if (win && !win.isDestroyed()) {
+        const point = screen.getCursorScreenPoint()
+        const windowBounds = win.getBounds()
+
+        win.webContents.send('global-mouse', {
+          mouseX: point.x,
+          mouseY: point.y,
+          winX: windowBounds.x,
+          winY: windowBounds.y
+        })
+      }
+    }, 16)
 
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL)
