@@ -4,9 +4,17 @@
     <meta charset="UTF-8" />
     <title>Companion</title>
     <script src="/live2dcubismcore.min.js"></script>
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <div id="canvas-container"></div>
+    <div id="speech-bubble" class="hidden">
+      <p id="bubble-text"></p>
+    </div>
+    <div id="input-area" class="hidden">
+      <input type="text" id="chat-input" placeholder="Type something.." autocomplete="off" />
+      <button id="send-btn">Send</button>
+    </div>
     <script type="module" src="index.js"></script>
   </body>
 </html>
