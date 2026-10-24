@@ -166,3 +166,90 @@ canvas {
   }
   * { transition-duration: 0.01ms !important; }
 }
+
+#drag-area {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 44px;
+  z-index: 100;
+  -webkit-app-region: drag;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.28), transparent);
+  opacity: 0;
+  will-change: opacity;
+  transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1) 0.1s;
+}
+
+#window-controls {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  z-index: 101;
+  display: flex;
+  gap: 6px;
+  -webkit-app-region: no-drag;
+  opacity: 0;
+  transform: translateY(-6px);
+  will-change: opacity, transform;
+  transition: opacity 0.45s cubic-bezier(0.4, 0, 0.2, 1) 0.1s,
+              transform 0.45s cubic-bezier(0.4, 0, 0.2, 1) 0.1s;
+}
+
+body:hover #drag-area,
+body:hover #window-controls,
+#window-controls:focus-within {
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+#window-controls button {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  background: rgba(43, 45, 49, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 50%;
+  color: #f2f3f5;
+  font-family: var(--font, 'Segoe UI', system-ui, sans-serif);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+
+  transition: background 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+}
+
+#window-controls button:hover {
+  background: rgba(88, 101, 242, 0.85);
+  border-color: transparent;
+  transform: scale(1.12);
+}
+
+#window-controls button:active {
+  transform: scale(0.94);
+}
+
+#window-controls button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+#btn-close:hover {
+  background: #ff4757;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #drag-area,
+  #window-controls,
+  #window-controls button {
+    transition-duration: 0.01ms;
+  }
+}
