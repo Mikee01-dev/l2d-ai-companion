@@ -1,8 +1,9 @@
 import * as PIXI from 'pixi.js';
 import { Live2DModel } from '@jannchie/pixi-live2d-display/cubism4';
-import { setupInteraction } from './interactions';
+import { setupInteraction } from './interactions.js'; 
+import { setupChatUI } from './ui/chat.js';       
+import { animateMouth } from './ai/mouth.js';     
 import './style.css';
-
 window.PIXI = PIXI;
 
 let model = null;
@@ -61,6 +62,19 @@ async function loadModel() {
         console.error('Gagal load model:', error);
     }
 }
+
+const chatUI = setupChatUI((userText) => {
+    
+    setTimeout(() => {
+        const dummyReply = `Hey there! I'm not yet integrated with LLM, maybe next time?`;
+        
+        chatUI.showBubble(dummyReply, 5000);
+        
+        const duration = dummyReply.length * 50; 
+        animateMouth(model, duration);
+        
+    }, 1000);
+});
 
 app.renderer.on('resize', positionModel);
 
