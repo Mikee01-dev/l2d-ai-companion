@@ -48,6 +48,17 @@ function positionModel() {
     model.position.set(w / 2, h / 2);
 }
 
+const btnClose = document.getElementById('btn-close');
+const btnMinimize = document.getElementById('btn-minimize');
+
+btnClose.addEventListener('click', () => {
+    window.electronAPI.closeWindow();
+});
+
+btnMinimize.addEventListener('click', () => {
+    window.electronAPI.minimizeWindow();
+});
+
 async function loadModel() {
     try {
         model = await Live2DModel.from(
