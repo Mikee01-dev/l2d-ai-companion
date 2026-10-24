@@ -1,11 +1,13 @@
-const { app, BrowserWindow, screen } = require('electron')
+const { app, BrowserWindow, screen, Menu, ipcMain } = require('electron')
 const path = require('node:path')
+
+Menu.setApplicationMenu(null);
 
 function createWindow() {
   const win = new BrowserWindow({
     width: 300,
     height: 600,
-    frame: true,
+    frame: false,
     transparent: false,
     hasShadow: false,
     alwaysOnTop: true,
@@ -31,6 +33,13 @@ function createWindow() {
         })
       }
     }, 16)
+
+  ipcMain.on('window-close', () => {
+    win.close();
+  });
+  ipcMain.on('window-minimize', () => {
+    win.minimize();
+  });
 
   if (process.env.ELECTRON_RENDERER_URL) {
     win.loadURL(process.env.ELECTRON_RENDERER_URL)
