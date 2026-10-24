@@ -87,6 +87,15 @@ const chatUI = setupChatUI((userText) => {
     }, 1000);
 });
 
+const clickOverlay = document.getElementById('click-overlay');
+clickOverlay.addEventListener('click', () => {
+    if (chatUI.getIsInputOpen()) {
+        chatUI.toggleInput(false);
+    } else {
+        chatUI.toggleInput(true);
+    }
+});
+
 app.renderer.on('resize', positionModel);
 
 await loadModel();

@@ -7,15 +7,20 @@
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
+    <div id="click-overlay"></div> 
+
     <div id="drag-area"></div>
     <div id="window-controls">
       <button id="btn-minimize">_</button>
       <button id="btn-close">✕</button>
     </div>
+    
     <div id="canvas-container"></div>
+    
     <div id="speech-bubble" class="hidden">
       <p id="bubble-text"></p>
     </div>
+    
     <div id="input-area" class="hidden">
       <input type="text" id="chat-input" placeholder="Type something.." autocomplete="off" />
       <button id="send-btn">Send</button>
