@@ -1,53 +1,67 @@
-# Mike - L2D AI Companion
+# L2D AI Companion
 
 A lightweight, transparent desktop companion powered by **Live2D** and **LLM**. 
-Unlike typical "AI waifu" projects, this companion features a custom-designed male character (chibi style) with a calm, attentive personality.
+Unlike typical "AI waifu" projects, this companion is designed to be **universal**—featuring a custom-rigged character, multi-language support, and dynamic personality switching.
 
-## Features (Work in Progress)
+## Features
 - [x] Transparent Electron window (always on top).
-- [x] Project setup with `electron-vite` (dev server & build).
-- [x] PixiJS canvas integrated with transparent background.
-- [x] Animated placeholder (rotating box) to verify rendering.
-- [ ] Custom rigged male chibi model (Half-body).
-- [ ] Mouse tracking (eyes & head follow cursor).
-- [ ] Auto-blink & breathing animation.
-- [ ] LLM integration for dynamic conversation.
-- [ ] TTS with lip-sync (`ParamMouthOpenY`).
-- [ ] Long-term memory.
+- [x] Custom rigged Live2D model (Half-body).
+- [x] Advanced behavior system (Idle, Curious, Sleepy, Yawn).
+- [x] Mouse tracking & real-time lip-sync.
+- [x] LLM integration (Groq API) with context-aware conversation.
+- [x] Multi-persona (Male / Female) & Multi-language (ID / EN).
+- [x] Chat UI with speech bubbles.
+- [ ] TTS (Text-to-Speech) integration (In Progress).
+- [ ] Long-term memory (Coming soon).
 
 ## Tech Stack
 - **Desktop Shell:** Electron + electron-vite
-- **Rendering:** PixiJS v7 (Live2D integration coming soon)
-- **Model:** Custom Live2D Cubism (Male Chibi)
-- **AI Brain:** [TBD - OpenAI / DeepSeek / Groq]
+- **Rendering:** PixiJS v8 + `@jannchie/pixi-live2d-display`
+- **AI Brain:** Groq API (Llama 3)
+- **Model:** Live2D Cubism (Custom / Sample)
+- **Language:** JavaScript (ES Modules)
 
 ## Getting Started
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/Mikee01-dev/l2d-ai-companion.git
-   cd l2d-ai-companion
-   ```
+### 1. Clone & Install
+```bash
+git clone https://github.com/Mikee01-dev/l2d-ai-companion.git
+cd l2d-ai-companion
+npm install
+```
 
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
+### 2. Environment Setup
+Create a `.env` file in the root directory and add your Groq API Key:
+```env
+VITE_GROQ_API_KEY=your_api_key_here
+```
 
-3. **Run in development**
-   ```bash
-   npm run dev
-   ```
-   *Note: Currently, the app opens a transparent window with a rotating blue box to test the PixiJS renderer. The Live2D model will be integrated in the next step.*
+### 3. Add Your Live2D Model
+- Place your model folder in `src/renderer/public/assets/live2d/your-model/`.
+- Open `src/renderer/index.js` and update the `MODEL_PATHS`:
+```javascript
+const MODEL_PATHS = {
+    male: '/assets/live2d/your-model/your-model.model3.json',
+    female: '/assets/live2d/hiyori/hiyori_pro_t11.model3.json' 
+};
+```
 
-## About the Character
-**Mike** is a chibi male companion. He is calm, observant, and occasionally teasing. 
-*(Rigging notes: Half-body, focusing on eye tracking, mouth sync, and subtle breathing.)*
+### 4. Run in Development
+```bash
+npm run dev
+```
+
+## About the Characters
+This project supports multiple personas:
+- **Mike:** A calm, attentive, and slightly teasing male companion.
+- **Kei:** A warm, gentle, and playful female companion.
+
+*(Note: You can easily add new personas by editing `src/renderer/ai/brain.js`)*
 
 ## Roadmap
-- **Week 1:** Foundation & Visual (Electron setup, Live2D rendering, mouse tracking).
-- **Week 2:** Brain & Voice (LLM API, TTS, Chat UI).
-- **Week 3:** Polish & Sync (Lip-sync, Emotion mapping, Memory).
+- **Week 1:** Foundation & Visual (Electron, PixiJS, Live2D, Behaviors).
+- **Week 2:** Brain & Voice (LLM, Chat UI, TTS, Lip-sync).
+- **Week 3:** Memory & Polish (Long-term memory, UI Settings, System Tray).
 
 ## License
 The code is MIT licensed. 
