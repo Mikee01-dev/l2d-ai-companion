@@ -65,6 +65,12 @@ async function loadCharacter(gender) {
     }
 }
 
+const appState = {
+    gender: 'male',
+    language: 'id',
+    userName: ''
+};
+
 app.canvas.addEventListener('webglcontextlost', (e) => {
     e.preventDefault();
     console.warn('WebGL context lost');
@@ -79,12 +85,6 @@ const btnClose = document.getElementById('btn-close');
 const btnMinimize = document.getElementById('btn-minimize');
 btnClose.addEventListener('click', () => window.electronAPI.closeWindow());
 btnMinimize.addEventListener('click', () => window.electronAPI.minimizeWindow());
-
-const appState = {
-    gender: 'male',
-    language: 'id',
-    userName: ''
-};
 
 const conversation = createConversation({
     userName: appState.userName,
@@ -105,9 +105,18 @@ const chatUI = setupChatUI(async (userText) => {
     animateMouth(model, duration, aiReply); 
 });
 
-setTimeout(() => {
-    const greeting = getGreeting({ gender: appState.gender, language: appState.language });
-    chatUI.showBubble(greeting, 5000);
+setTimeout(async () => {
+    const storageKey = appState.gender === 'male' ? 'mike_chat_history' : 'kei_chat_history';
+    const savedHistory = localStorage.getItem(storageKey);
+    
+    if (savedHistory && JSON.parse(savedHistory).length > 0) {
+        const aiReply = await conversation.send("(Sistem: Kamu baru saja menyala kembali. Sapa pengguna dengan hangat dan tanyakan kelanjutan obrolan terakhir.)");
+        chatUI.showBubble(aiReply, 6000);
+        animateMouth(model, aiReply.length * 70, aiReply);
+    } else {
+        const greeting = getGreeting({ gender: appState.gender, language: appState.language });
+        chatUI.showBubble(greeting, 5000);
+    }
 }, 2000);
 
 const btnMale = document.getElementById('btn-male');
@@ -116,7 +125,6 @@ const btnFemale = document.getElementById('btn-female');
 btnMale.addEventListener('click', async () => {
     if (appState.gender === 'male') return;
     appState.gender = 'male';
-    conversation.reset();
     btnMale.classList.add('active');
     btnFemale.classList.remove('active');
     
@@ -129,7 +137,6 @@ btnMale.addEventListener('click', async () => {
 btnFemale.addEventListener('click', async () => {
     if (appState.gender === 'female') return;
     appState.gender = 'female';
-    conversation.reset();
     btnFemale.classList.add('active');
     btnMale.classList.remove('active');
     
@@ -156,7 +163,6 @@ btnLangId.addEventListener('click', () => {
 btnLangEn.addEventListener('click', () => {
     if (appState.language === 'en') return;
     appState.language = 'en';
-    conversation.reset();
     btnLangEn.classList.add('active');
     btnLangId.classList.remove('active');
     
@@ -172,6 +178,20 @@ clickOverlay.addEventListener('click', () => {
         chatUI.toggleInput(true);
     }
 });
+
+const btnReset = document.getElementById('btn-reset-memory');
+if (btnReset) {
+    btnReset.addEventListener('click', () => {
+        conversation.reset();
+        
+        const charName = appState.gender === 'male' ? 'Mike' : 'Kei';
+        const resetText = appState.language === 'en' 
+            ? `${charName}'s memory cleared. Let's start over!` 
+            : `Memori ${charName} dihapus. Kita mulai dari awal ya!`;
+            
+        chatUI.showBubble(resetText, 3000);
+    });
+}
 
 app.renderer.on('resize', positionModel);
 
