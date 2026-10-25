@@ -23,20 +23,10 @@ await app.init({
 
 container.appendChild(app.canvas);
 
-app.canvas.addEventListener('webglcontextlost', (e) => {
-    e.preventDefault();
-    console.warn('WebGL context lost');
-});
-
-app.canvas.addEventListener('webglcontextrestored', async () => {
-    console.warn('WebGL context restored, reload model');
-    if (model) {
-        app.stage.removeChild(model);
-        model.destroy();
-        model = null;
-    }
-    await loadModel();
-});
+const MODEL_PATHS = {
+    male: '/assets/live2d/mikee/mikee.model3.json',
+    female: '/assets/live2d/kei_vowels_pro/runtime/kei_vowels_pro.model3.json'
+};
 
 function positionModel() {
     if (!model) return;
@@ -50,33 +40,45 @@ function positionModel() {
     model.position.set(w / 2, h / 2);
 }
 
-const btnClose = document.getElementById('btn-close');
-const btnMinimize = document.getElementById('btn-minimize');
-
-btnClose.addEventListener('click', () => {
-    window.electronAPI.closeWindow();
-});
-
-btnMinimize.addEventListener('click', () => {
-    window.electronAPI.minimizeWindow();
-});
-
-async function loadModel() {
+async function loadCharacter(gender) {
     try {
-        model = await Live2DModel.from(
-            '/assets/live2d/kei_vowels_pro/runtime/kei_vowels_pro.model3.json'
-        );
+        if (model) {
+            app.stage.removeChild(model);
+            model.destroy();
+            model = null;
+        }
+
+        const modelPath = MODEL_PATHS[gender];
+        if (!modelPath) throw new Error(`Path model untuk ${gender} tidak ditemukan`);
+
+        model = await Live2DModel.from(modelPath);
         app.stage.addChild(model);
         positionModel(); 
 
         setupInteraction(model, {
             getTalk: () => getTalkLevel(model)
         });
-        console.log('Model berhasil di-load!');
+        
+        console.log(`Model ${gender} berhasil di-load!`);
     } catch (error) {
-        console.error('Gagal load model:', error);
+        console.error(`Gagal load model ${gender}:`, error);
     }
 }
+
+app.canvas.addEventListener('webglcontextlost', (e) => {
+    e.preventDefault();
+    console.warn('WebGL context lost');
+});
+
+app.canvas.addEventListener('webglcontextrestored', async () => {
+    console.warn('WebGL context restored, reload model');
+    await loadCharacter(appState.gender);
+});
+
+const btnClose = document.getElementById('btn-close');
+const btnMinimize = document.getElementById('btn-minimize');
+btnClose.addEventListener('click', () => window.electronAPI.closeWindow());
+btnMinimize.addEventListener('click', () => window.electronAPI.minimizeWindow());
 
 const appState = {
     gender: 'male',
@@ -111,23 +113,27 @@ setTimeout(() => {
 const btnMale = document.getElementById('btn-male');
 const btnFemale = document.getElementById('btn-female');
 
-btnMale.addEventListener('click', () => {
+btnMale.addEventListener('click', async () => {
     if (appState.gender === 'male') return;
     appState.gender = 'male';
     conversation.reset();
     btnMale.classList.add('active');
     btnFemale.classList.remove('active');
     
+    await loadCharacter('male');
+    
     const greeting = getGreeting({ gender: 'male', language: appState.language });
     chatUI.showBubble(greeting, 3000);
 });
 
-btnFemale.addEventListener('click', () => {
+btnFemale.addEventListener('click', async () => {
     if (appState.gender === 'female') return;
     appState.gender = 'female';
     conversation.reset();
     btnFemale.classList.add('active');
     btnMale.classList.remove('active');
+    
+    await loadCharacter('female');
     
     const greeting = getGreeting({ gender: 'female', language: appState.language });
     chatUI.showBubble(greeting, 3000);
@@ -169,4 +175,4 @@ clickOverlay.addEventListener('click', () => {
 
 app.renderer.on('resize', positionModel);
 
-await loadModel();
+await loadCharacter('male');
