@@ -2,7 +2,9 @@ import * as PIXI from 'pixi.js';
 import { Live2DModel } from '@jannchie/pixi-live2d-display/cubism4';
 import { setupInteraction } from './interactions.js'; 
 import { setupChatUI } from './ui/chat.js';       
-import { animateMouth, getTalkLevel } from './ai/mouth.js';     
+import { animateMouth, getTalkLevel } from './ai/mouth.js';
+import { createConversation, getGreeting } from './ai/brain.js';
+
 import './style.css';
 window.PIXI = PIXI;
 
@@ -76,19 +78,84 @@ async function loadModel() {
     }
 }
 
-const chatUI = setupChatUI((userText) => {
-    
-    setTimeout(() => {
-        const dummyReply = `Hey there! I'm not yet integrated with LLM, maybe next time?`;
-        
-        chatUI.showBubble(dummyReply, 5000);
-        
-        const duration = dummyReply.length * 50; 
-        animateMouth(model, duration);
+const appState = {
+    gender: 'male',
+    language: 'id',
+    userName: ''
+};
 
-        animateMouth(model, duration, dummyReply);
-        
-    }, 1000);
+const conversation = createConversation({
+    userName: appState.userName,
+    getSettings: () => ({
+        gender: appState.gender,
+        language: appState.language
+    })
+});
+
+const chatUI = setupChatUI(async (userText) => {
+    chatUI.showBubble("...", 2000);
+    
+    const aiReply = await conversation.send(userText);
+    
+    chatUI.showBubble(aiReply, 6000);
+    
+    const duration = aiReply.length * 70; 
+    animateMouth(model, duration, aiReply); 
+});
+
+setTimeout(() => {
+    const greeting = getGreeting({ gender: appState.gender, language: appState.language });
+    chatUI.showBubble(greeting, 5000);
+}, 2000);
+
+const btnMale = document.getElementById('btn-male');
+const btnFemale = document.getElementById('btn-female');
+
+btnMale.addEventListener('click', () => {
+    if (appState.gender === 'male') return;
+    appState.gender = 'male';
+    conversation.reset();
+    btnMale.classList.add('active');
+    btnFemale.classList.remove('active');
+    
+    const greeting = getGreeting({ gender: 'male', language: appState.language });
+    chatUI.showBubble(greeting, 3000);
+});
+
+btnFemale.addEventListener('click', () => {
+    if (appState.gender === 'female') return;
+    appState.gender = 'female';
+    conversation.reset();
+    btnFemale.classList.add('active');
+    btnMale.classList.remove('active');
+    
+    const greeting = getGreeting({ gender: 'female', language: appState.language });
+    chatUI.showBubble(greeting, 3000);
+});
+
+const btnLangId = document.getElementById('btn-lang-id');
+const btnLangEn = document.getElementById('btn-lang-en');
+
+btnLangId.addEventListener('click', () => {
+    if (appState.language === 'id') return;
+    appState.language = 'id';
+    conversation.reset();
+    btnLangId.classList.add('active');
+    btnLangEn.classList.remove('active');
+    
+    const greeting = getGreeting({ gender: appState.gender, language: 'id' });
+    chatUI.showBubble(greeting, 3000);
+});
+
+btnLangEn.addEventListener('click', () => {
+    if (appState.language === 'en') return;
+    appState.language = 'en';
+    conversation.reset();
+    btnLangEn.classList.add('active');
+    btnLangId.classList.remove('active');
+    
+    const greeting = getGreeting({ gender: appState.gender, language: 'en' });
+    chatUI.showBubble(greeting, 3000);
 });
 
 const clickOverlay = document.getElementById('click-overlay');
