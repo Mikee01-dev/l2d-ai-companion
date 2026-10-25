@@ -2,7 +2,7 @@ import * as PIXI from 'pixi.js';
 import { Live2DModel } from '@jannchie/pixi-live2d-display/cubism4';
 import { setupInteraction } from './interactions.js'; 
 import { setupChatUI } from './ui/chat.js';       
-import { animateMouth } from './ai/mouth.js';     
+import { animateMouth, getTalkLevel } from './ai/mouth.js';     
 import './style.css';
 window.PIXI = PIXI;
 
@@ -67,7 +67,9 @@ async function loadModel() {
         app.stage.addChild(model);
         positionModel(); 
 
-        setupInteraction(model, app);
+        setupInteraction(model, {
+            getTalk: () => getTalkLevel(model)
+        });
         console.log('Model berhasil di-load!');
     } catch (error) {
         console.error('Gagal load model:', error);
@@ -83,6 +85,8 @@ const chatUI = setupChatUI((userText) => {
         
         const duration = dummyReply.length * 50; 
         animateMouth(model, duration);
+
+        animateMouth(model, duration, dummyReply);
         
     }, 1000);
 });
