@@ -286,17 +286,35 @@ export function getGreeting(settings = {}) {
 }
 
 export function createConversation({ userName, getSettings } = {}) {
-    const history = [];
+    const getStorageKey = () => {
+        const settings = getSettings ? getSettings() : {};
+        const gender = settings.gender || 'male';
+        return gender === 'male' ? 'mike_chat_history' : 'kei_chat_history';
+    };
+
+    const loadHistory = () => {
+        const savedHistory = localStorage.getItem(getStorageKey());
+        return savedHistory ? JSON.parse(savedHistory) : [];
+    };
+
     return {
         async send(userText) {
+            const history = loadHistory();
             const settings = getSettings ? getSettings() : {};
+            
             const { ok, text } = await requestReply(userText, history, { ...settings, userName });
+            
             if (ok) {
                 history.push({ role: 'user', content: userText });
                 history.push({ role: 'assistant', content: text });
+                
+                const recentHistory = history.slice(-20); 
+                localStorage.setItem(getStorageKey(), JSON.stringify(recentHistory));
             }
             return text;
         },
-        reset() { history.length = 0; },
+        reset() { 
+            localStorage.removeItem(getStorageKey()); 
+        },
     };
 }
