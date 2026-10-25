@@ -427,3 +427,37 @@ body:hover #window-controls,
     transition-duration: 0.01ms;
   }
 }
+
+#btn-reset-memory {
+  position: absolute;
+  top: 90px;
+  left: 10px;
+  z-index: 100;
+  -webkit-app-region: no-drag;
+  user-select: none;
+
+  background: rgba(30, 31, 34, 0.55);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+
+  color: #ff4757;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+#btn-reset-memory:hover {
+  background: rgba(255, 71, 87, 0.15);
+  border-color: rgba(255, 71, 87, 0.4);
+  color: #ff6b81;
+  transform: scale(1.05);
+}
+
+#btn-reset-memory:active {
+  transform: scale(0.95);
+}
