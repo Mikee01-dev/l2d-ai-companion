@@ -3,6 +3,7 @@ dist/
 out/
 .DS_Store
 *.log
+.env
 
 src/renderer/public/assets/live2d/*
 !src/renderer/public/assets/live2d/.gitkeep
