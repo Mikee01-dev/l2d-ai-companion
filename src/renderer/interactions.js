@@ -15,7 +15,6 @@ export function setupInteraction(model, options = {}) {
         SLEEPY:  { eyes: 3,  head: 2, body: 1 },
     };
     const FOCUS_HOLD = 3.0;
-    const SLEEPY_AFTER = 20;
     const TILT_SIGN = 1;
     
     model.autoInteract = false;
@@ -196,6 +195,10 @@ export function setupInteraction(model, options = {}) {
         }
         state.wasTalking = talking;
 
+        const hour = new Date().getHours();
+        const isNightTime = (hour >= 23 || hour < 4);
+        const sleepyThreshold = isNightTime ? 10 : 20;
+
         switch (state.mood) {
             case 'FOCUS':
                 if (state.moodTimer > FOCUS_HOLD) enter('IDLE', rand(4, 6));
@@ -204,10 +207,12 @@ export function setupInteraction(model, options = {}) {
             case 'IDLE':
                 if (state.moodTimer > state.moodDuration) {
                     const roll = Math.random();
-                    const canSleep = state.idleTotal > SLEEPY_AFTER;
+                    const canSleep = state.idleTotal > sleepyThreshold;
+                    const sleepChance = isNightTime ? 0.7 : 0.4;
+
                     if (roll < (canSleep ? 0.4 : 0.6)) {
                         startCurious();
-                    } else if (canSleep && roll < 0.7) {
+                    } else if (canSleep && roll < (canSleep ? sleepChance : 0.7)) {
                         startSleepy();
                     } else {
                         lookAt(0, 0, { speed: SPEED.IDLE });
