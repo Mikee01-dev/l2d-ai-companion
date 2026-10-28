@@ -168,13 +168,29 @@ function buildSystemPrompt({ gender, language, userName }) {
     const persona = PERSONAS[gender];
     const lang = LANGUAGES[language];
     const now = new Date();
+    const hour = now.getHours();
+
+    let timeVibe = "";
+    if (hour >= 23 || hour < 4) {
+        timeVibe = language === 'id' 
+            ? "Sekarang tengah malam. Kamu harus sering menguap, ngantuk, dan nyuruh pengguna tidur."
+            : "It's the middle of the night. You should yawn often, feel sleepy, and tell the user to sleep.";
+    } else if (hour >= 4 && hour < 11) {
+        timeVibe = language === 'id'
+            ? "Sekarang pagi. Kamu harus lebih ceria dan semangat."
+            : "It's morning. You should be more cheerful and energetic.";
+    } else if (hour >= 18 && hour < 23) {
+        timeVibe = language === 'id'
+            ? "Sekarang malam. Kamu lebih santai dan tenang."
+            : "It's evening. You are more relaxed and calm.";
+    }
 
     const context = lang.context({
         weekday: now.toLocaleDateString(lang.locale, { weekday: 'long' }),
-        part: lang.partOfDay(now.getHours()),
+        part: lang.partOfDay(hour),
         time: now.toLocaleTimeString(lang.locale, { hour: 'numeric', minute: '2-digit' }),
         userName,
-    });
+    }) + `\n${timeVibe}`;
 
     return lang.prompt({
         name: persona.name,
