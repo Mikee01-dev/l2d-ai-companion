@@ -13,6 +13,11 @@ let model = null;
 let reactions = null;
 let loadToken = 0;
 
+const modelSettings = {
+    scale: 1.0,
+    offsetY: 0
+};
+
 const container = document.getElementById('canvas-container');
 const canvasContainer = container;
 const app = new PIXI.Application();
@@ -45,10 +50,11 @@ function positionModel() {
     const h = app.screen.height;
 
     model.scale.set(1);
-    const scale = Math.min(w / model.width, h / model.height);
-    model.scale.set(scale * 1.4);
+    const baseScale = Math.min(w / model.width, h / model.height);
+    
+    model.scale.set(baseScale * 1.4 * modelSettings.scale);
     model.anchor.set(0.5, 0.5);
-    model.position.set(w / 2, h / 2);
+    model.position.set(w / 2, (h / 2) + modelSettings.offsetY);
 }
 
 async function loadCharacter(gender) {
@@ -118,19 +124,14 @@ const conversation = createConversation({
 
 const chatUI = setupChatUI(async (userText) => {
     chatUI.showBubble("...", 2000);
-
     const aiReply = await conversation.send(userText);
-
     chatUI.showBubble(aiReply, 6000);
-
-    const duration = aiReply.length * 70;
-    animateMouth(model, duration, aiReply);
+    animateMouth(model, aiReply.length * 70, aiReply);
 });
 
 setTimeout(async () => {
     const storageKey = appState.gender === 'male' ? 'mike_chat_history' : 'kei_chat_history';
     const savedHistory = localStorage.getItem(storageKey);
-
     let hasHistory = false;
     try { hasHistory = JSON.parse(savedHistory)?.length > 0; } catch {}
 
@@ -145,6 +146,29 @@ setTimeout(async () => {
     }
 }, 2000);
 
+const btnSettings = document.getElementById('btn-settings');
+const settingsPanel = document.getElementById('settings-panel');
+const btnCloseSettings = document.getElementById('btn-close-settings');
+const sliderScale = document.getElementById('slider-scale');
+const sliderY = document.getElementById('slider-y');
+const valScale = document.getElementById('val-scale');
+const valY = document.getElementById('val-y');
+
+btnSettings.addEventListener('click', () => settingsPanel.classList.toggle('hidden'));
+btnCloseSettings.addEventListener('click', () => settingsPanel.classList.add('hidden'));
+
+sliderScale.addEventListener('input', (e) => {
+    modelSettings.scale = parseFloat(e.target.value);
+    valScale.textContent = modelSettings.scale.toFixed(1);
+    positionModel();
+});
+
+sliderY.addEventListener('input', (e) => {
+    modelSettings.offsetY = parseFloat(e.target.value);
+    valY.textContent = modelSettings.offsetY;
+    positionModel();
+});
+
 const btnMale = document.getElementById('btn-male');
 const btnFemale = document.getElementById('btn-female');
 
@@ -153,9 +177,7 @@ btnMale.addEventListener('click', async () => {
     appState.gender = 'male';
     btnMale.classList.add('active');
     btnFemale.classList.remove('active');
-
     await loadCharacter('male');
-
     const greeting = getGreeting({ gender: 'male', language: appState.language });
     chatUI.showBubble(greeting, 3000);
 });
@@ -165,9 +187,7 @@ btnFemale.addEventListener('click', async () => {
     appState.gender = 'female';
     btnFemale.classList.add('active');
     btnMale.classList.remove('active');
-
     await loadCharacter('female');
-
     const greeting = getGreeting({ gender: 'female', language: appState.language });
     chatUI.showBubble(greeting, 3000);
 });
@@ -180,7 +200,6 @@ btnLangId.addEventListener('click', () => {
     appState.language = 'id';
     btnLangId.classList.add('active');
     btnLangEn.classList.remove('active');
-
     const greeting = getGreeting({ gender: appState.gender, language: 'id' });
     chatUI.showBubble(greeting, 3000);
 });
@@ -190,7 +209,6 @@ btnLangEn.addEventListener('click', () => {
     appState.language = 'en';
     btnLangEn.classList.add('active');
     btnLangId.classList.remove('active');
-
     const greeting = getGreeting({ gender: appState.gender, language: 'en' });
     chatUI.showBubble(greeting, 3000);
 });
@@ -221,7 +239,6 @@ function toCanvasPoint(e) {
 function hitModel(e) {
     if (!model || !reactions) return null;
     const { x, y } = toCanvasPoint(e);
-
     const b0 = model.getBounds();
     const b = b0.rectangle ?? b0;
     const dir = x < b.x + b.width / 2 ? 1 : -1;
@@ -273,7 +290,6 @@ function endPress() {
 
 canvasContainer.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
-
     const hit = hitModel(e);
     suppressNextClick = Boolean(hit);
     if (!hit) { cancelPress(); return; }
@@ -300,14 +316,12 @@ window.addEventListener('pointermove', (e) => {
         press.dist += Math.hypot(e.clientX - press.lastX, e.clientY - press.lastY);
         press.lastX = e.clientX;
         press.lastY = e.clientY;
-
         if (!press.stroking && press.dist > STROKE_DIST) startStroke(press);
         if (press.ctx) {
             press.ctx.lean = Math.max(-1, Math.min(1, (e.clientX - press.startX) / LEAN_RANGE));
         }
         return;
     }
-
     if (!press && e.target === app.canvas) {
         canvasContainer.style.cursor = hitModel(e) ? 'pointer' : 'default';
     }
@@ -329,12 +343,10 @@ const btnReset = document.getElementById('btn-reset-memory');
 if (btnReset) {
     btnReset.addEventListener('click', () => {
         conversation.reset();
-
         const charName = appState.gender === 'male' ? 'Mike' : 'Kei';
         const resetText = appState.language === 'en'
             ? `${charName}'s memory cleared. Let's start over!`
             : `Memori ${charName} dihapus. Kita mulai dari awal ya!`;
-
         chatUI.showBubble(resetText, 3000);
     });
 }
