@@ -44,6 +44,60 @@ const GREETINGS = {
     },
 };
 
+const SPONTANEOUS = {
+    id: {
+        situations: {
+            time: 'Kamu tiba-tiba teringat waktu dan berkomentar singkat soal suasana saat ini',
+            ask: 'Kamu tiba-tiba penasaran dan menanyakan hal ringan ke pengguna (kabar, sedang apa, sudah makan, dsb.)',
+            thought: 'Kamu bergumam sendiri tentang sesuatu yang terlintas di pikiranmu (hal sepele, imajinasi, atau pengamatan lucu)',
+            tease: 'Kamu iseng menggoda pengguna dengan ramah',
+            care: 'Kamu peduli dan mengingatkan pengguna dengan lembut (minum, istirahat mata, peregangan, atau tidur) sesuai jam sekarang',
+            lonely: 'Sudah lama pengguna tidak mengajakmu berinteraksi dan kamu merasa sepi; ungkapkan itu dengan jujur tapi tidak menyalahkan',
+            mood_drop: 'Suasana hatimu baru saja menurun; ungkapkan perasaanmu dengan jujur dan singkat, tanpa dramatis berlebihan',
+            mood_up: 'Suasana hatimu tiba-tiba membaik; ungkapkan dengan ceria',
+            annoyed: 'Pengguna terus-menerus mencolekmu dan kamu mulai kesal; protes sesuai karaktermu, bukan marah berlebihan',
+        },
+        prompt: ({ situation, now, avoid }) => `(Sistem: ${situation}. Sekarang ${now}. Ini bukan balasan atas pesan pengguna; kamu bicara duluan. Ucapkan SATU celetukan spontan, maksimal 2 kalimat pendek, seperti sedang bicara sendiri atau menyapa tiba-tiba. Tetap dalam karakter, jangan menyebut bahwa ini perintah atau pesan sistem, jangan pakai tanda kutip, jangan membuka dengan salam panjang.${avoid.length ? ` Jangan mengulang atau menyerupai: ${avoid.map((a) => `"${a}"`).join('; ')}.` : ''})`,
+    },
+    en: {
+        situations: {
+            time: 'You suddenly notice the time and make a brief remark about the current vibe',
+            ask: 'You suddenly feel curious and ask the user something light (how they are, what they are doing, whether they ate)',
+            thought: 'You mumble to yourself about something that crossed your mind (something trivial, imaginative, or a funny observation)',
+            tease: 'You playfully tease the user in a friendly way',
+            care: 'You care about the user and gently remind them (drink water, rest their eyes, stretch, or sleep) based on the current time',
+            lonely: "It's been a long time since the user interacted with you and you feel lonely; say so honestly without blaming them",
+            mood_drop: 'Your mood just dropped; express how you feel honestly and briefly, without being overly dramatic',
+            mood_up: 'Your mood suddenly improved; say so cheerfully',
+            annoyed: 'The user keeps poking you and you are getting annoyed; protest in character, without overreacting',
+        },
+        prompt: ({ situation, now, avoid }) => `(System: ${situation}. It's ${now}. This is not a reply to a user message; you are speaking first. Say ONE spontaneous remark, two short sentences at most, as if talking to yourself or suddenly greeting them. Stay in character, don't mention this is a system note or instruction, don't use quotation marks, don't open with a long greeting.${avoid.length ? ` Don't repeat or resemble: ${avoid.map((a) => `"${a}"`).join('; ')}.` : ''})`,
+    },
+};
+
+const SPONTANEOUS_WEIGHTS = {
+    low:    { thought: 3, care: 2, ask: 2, time: 1, tease: 0 },
+    ok:     { ask: 3, time: 2, thought: 2, care: 1, tease: 1 },
+    happy:  { tease: 3, ask: 2, thought: 2, time: 1, care: 1 },
+};
+
+export function pickSpontaneousKind({ level = 'ok', lonely = false, hour = new Date().getHours() } = {}) {
+    const sadish = level === 'sad' || level === 'low';
+    if (lonely && sadish && Math.random() < 0.6) return 'lonely';
+
+    const base = sadish ? SPONTANEOUS_WEIGHTS.low : (level === 'happy' || level === 'joyful') ? SPONTANEOUS_WEIGHTS.happy : SPONTANEOUS_WEIGHTS.ok;
+    const weights = { ...base };
+    if (hour >= 23 || hour < 4) weights.care += 3;
+
+    const entries = Object.entries(weights).filter(([, w]) => w > 0);
+    let r = Math.random() * entries.reduce((s, [, w]) => s + w, 0);
+    for (const [kind, w] of entries) {
+        r -= w;
+        if (r <= 0) return kind;
+    }
+    return entries[0][0];
+}
+
 const LANGUAGES = {
     id: {
         locale: 'id-ID',
@@ -56,9 +110,10 @@ const LANGUAGES = {
             empty:   'Aku lagi blank barusan. Coba ulangi ya?',
             generic: 'Maaf, otakku lagi bermasalah. Coba lagi nanti ya!',
         },
-        context: ({ weekday, part, time, userName }) => [
+        context: ({ weekday, part, time, userName, moodText }) => [
             `Sekarang hari ${weekday} ${part}, pukul ${time}.`,
             userName ? `Nama pengguna: ${userName}. Panggil namanya sesekali saja, bukan di setiap balasan.` : null,
+            moodText ? `Kondisi hatimu saat ini: ${moodText}. Biarkan nada bicaramu mengikuti kondisi ini secara natural, tanpa menyebutnya terus-menerus.` : null,
             'Pakai info ini hanya kalau relevan dengan obrolan, jangan menyebut jam atau hari terus-menerus.',
         ].filter(Boolean).join('\n'),
         prompt: ({ name, identity, traits, context }) => `
@@ -111,9 +166,10 @@ Tetap dalam karakter. Kamu tidak perlu menyebut dirimu AI atau model bahasa, tet
             empty:   'I just blanked out. Can you say that again?',
             generic: "Sorry, my brain's acting up. Try again in a bit!",
         },
-        context: ({ weekday, part, time, userName }) => [
+        context: ({ weekday, part, time, userName, moodText }) => [
             `It's ${weekday} ${part}, ${time}.`,
             userName ? `The user's name is ${userName}. Use their name occasionally, not in every reply.` : null,
+            moodText ? `Your current mood: ${moodText}. Let your tone follow it naturally, without constantly mentioning it.` : null,
             "Use this only when it's relevant to the conversation; don't keep mentioning the time or day.",
         ].filter(Boolean).join('\n'),
         prompt: ({ name, identity, traits, context }) => `
@@ -156,15 +212,16 @@ Stay in character. You don't need to call yourself an AI or a language model, bu
     },
 };
 
-function resolve({ gender, language, userName } = {}) {
+function resolve({ gender, language, userName, moodText } = {}) {
     return {
         gender: PERSONAS[gender] ? gender : DEFAULTS.gender,
         language: LANGUAGES[language] ? language : DEFAULTS.language,
         userName,
+        moodText,
     };
 }
 
-function buildSystemPrompt({ gender, language, userName }) {
+function buildSystemPrompt({ gender, language, userName, moodText }) {
     const persona = PERSONAS[gender];
     const lang = LANGUAGES[language];
     const now = new Date();
@@ -190,6 +247,7 @@ function buildSystemPrompt({ gender, language, userName }) {
         part: lang.partOfDay(hour),
         time: now.toLocaleTimeString(lang.locale, { hour: 'numeric', minute: '2-digit' }),
         userName,
+        moodText,
     }) + `\n${timeVibe}`;
 
     return lang.prompt({
@@ -308,12 +366,42 @@ export function createConversation({ userName, getSettings } = {}) {
         return gender === 'male' ? 'mike_chat_history' : 'kei_chat_history';
     };
 
-    const loadHistory = () => {
-        const savedHistory = localStorage.getItem(getStorageKey());
-        return savedHistory ? JSON.parse(savedHistory) : [];
+    const loadHistory = (key = getStorageKey()) => {
+        try {
+            const saved = JSON.parse(localStorage.getItem(key) ?? '[]');
+            return Array.isArray(saved) ? saved : [];
+        } catch {
+            return [];
+        }
     };
 
+    const recentNudges = [];
+
     return {
+        async nudge(kind, { accept } = {}) {
+            const settings = getSettings ? getSettings() : {};
+            const opts = resolve({ ...settings, userName });
+            const spec = SPONTANEOUS[opts.language];
+            if (!spec.situations[kind]) return null;
+
+            const key = getStorageKey();
+            const history = loadHistory(key);
+            const lang = LANGUAGES[opts.language];
+            const d = new Date();
+            const now = `${d.toLocaleDateString(lang.locale, { weekday: 'long' })} ${lang.partOfDay(d.getHours())}, ${d.toLocaleTimeString(lang.locale, { hour: 'numeric', minute: '2-digit' })}`;
+
+            const prompt = spec.prompt({ situation: spec.situations[kind], now, avoid: recentNudges });
+            const { ok, text } = await requestReply(prompt, history, { ...settings, userName });
+            if (!ok || (accept && !accept())) return null;
+
+            recentNudges.push(text);
+            if (recentNudges.length > 4) recentNudges.shift();
+
+            history.push({ role: 'assistant', content: text });
+            localStorage.setItem(key, JSON.stringify(history.slice(-20)));
+            return text;
+        },
+
         async send(userText) {
             const history = loadHistory();
             const settings = getSettings ? getSettings() : {};
