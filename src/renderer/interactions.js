@@ -1,10 +1,44 @@
+const MOOD = {
+    baseline: 0.55,
+    floor: 0.15,
+    lonelyAfterMin: 20,
+    lonelyDropPerMin: 0.012,
+    calmDropPerMin: 0.02,
+    recoverPerMin: 0.01,
+    irritationDecayPerMin: 0.4,
+    annoyedAt: 0.6,
+    annoyedRearmAt: 0.3,
+    maxAwayMin: 360,
+    hysteresis: 0.03,
+    delta: { chat: 0.08, pat: 0.06, stroke: 0.1, poke: -0.02 },
+};
+
+const MOOD_LEVELS = ['sad', 'low', 'ok', 'happy', 'joyful'];
+const MOOD_BOUNDS = [0.2, 0.4, 0.7, 0.88];
+
+const MOOD_TEXT = {
+    id: {
+        sad: 'sedih dan merasa sepi', low: 'agak murung', ok: 'biasa saja dan tenang',
+        happy: 'senang', joyful: 'sangat ceria dan bersemangat',
+    },
+    en: {
+        sad: 'sad and lonely', low: 'a bit down', ok: 'calm and neutral',
+        happy: 'happy', joyful: 'very cheerful and energetic',
+    },
+};
+
+function spanText(min, en) {
+    if (min >= 120) return en ? `${Math.round(min / 60)} hours` : `${Math.round(min / 60)} jam`;
+    return en ? `${Math.round(min)} minutes` : `${Math.round(min)} menit`;
+}
+
 export function setupInteraction(model, options = {}) {
-    if (!model) return () => {};
+    if (!model) return null;
 
     const getTalk = typeof options.getTalk === 'function' ? options.getTalk : () => 0;
     const internal = model.internalModel;
     const core = internal.coreModel;
-    
+
     const RANGE_X = window.screen.width / 2;
     const RANGE_Y = window.screen.height / 2;
 
@@ -16,7 +50,7 @@ export function setupInteraction(model, options = {}) {
     };
     const FOCUS_HOLD = 3.0;
     const TILT_SIGN = 1;
-    
+
     model.autoInteract = false;
     internal.eyeBlink = undefined;
     internal.breath = undefined;
@@ -26,7 +60,145 @@ export function setupInteraction(model, options = {}) {
     const rand = (a, b) => a + Math.random() * (b - a);
     const smooth = (t) => t * t * (3 - 2 * t);
     const set = (id, v) => core.setParameterValueById(id, v);
-    
+
+    // Cek parameter
+    const hasEyeSmile = core.getParameterIndex('ParamEyeLSmile') !== -1;
+    const hasCheek = core.getParameterIndex('ParamCheek') !== -1;
+
+    const storageKey = options.storageKey ?? null;
+    const mood = {
+        value: MOOD.baseline,
+        since: 0,
+        irritation: 0,
+        armed: true,
+        level: 0,
+        lastWall: Date.now(),
+        lastSave: Date.now(),
+    };
+    const moodListeners = { level: [], annoyed: [] };
+
+    function moodEmit(name, payload) {
+        for (const fn of [...moodListeners[name]]) {
+            try { fn(payload); } catch (err) { console.warn(`[mood] listener ${name}:`, err); }
+        }
+    }
+
+    function moodResolveLevel(value, prev) {
+        let idx = prev;
+        while (idx > 0 && value < MOOD_BOUNDS[idx - 1]) idx--;
+        while (idx < MOOD_BOUNDS.length && value >= MOOD_BOUNDS[idx] + MOOD.hysteresis) idx++;
+        return idx;
+    }
+
+    function moodAdvance(min) {
+        if (!(min > 0)) return;
+        const start = mood.since;
+        const end = start + min;
+        const neglect = Math.max(0, end - Math.max(start, MOOD.lonelyAfterMin));
+        const calm = min - neglect;
+
+        if (calm > 0) {
+            if (mood.value > MOOD.baseline) mood.value = Math.max(MOOD.baseline, mood.value - calm * MOOD.calmDropPerMin);
+            else if (mood.value < MOOD.baseline) mood.value = Math.min(MOOD.baseline, mood.value + calm * MOOD.recoverPerMin);
+        }
+        if (neglect > 0) {
+            mood.value = Math.min(mood.value, Math.max(MOOD.floor, mood.value - neglect * MOOD.lonelyDropPerMin));
+        }
+        mood.since = end;
+        mood.irritation = Math.max(0, mood.irritation - min * MOOD.irritationDecayPerMin);
+    }
+
+    function moodCommit(source) {
+        mood.value = clamp(mood.value, 0, 1);
+        if (mood.irritation < MOOD.annoyedRearmAt) mood.armed = true;
+
+        const prev = mood.level;
+        mood.level = moodResolveLevel(mood.value, prev);
+        if (mood.level !== prev) {
+            moodEmit('level', {
+                prev: MOOD_LEVELS[prev],
+                next: MOOD_LEVELS[mood.level],
+                direction: mood.level > prev ? 'up' : 'down',
+                happiness: mood.value,
+                source,
+            });
+        }
+    }
+
+    function moodSave() {
+        mood.lastSave = Date.now();
+        if (!storageKey) return;
+        try {
+            localStorage.setItem(storageKey, JSON.stringify({
+                value: mood.value, since: mood.since, irritation: mood.irritation, saved: Date.now(),
+            }));
+        } catch { }
+    }
+
+    function moodEvent(type) {
+        let delta = MOOD.delta[type];
+        if (delta === undefined) return;
+
+        if (delta > 0 && mood.since > MOOD.lonelyAfterMin) delta *= 2;
+
+        if (type === 'poke') {
+            mood.irritation = clamp(mood.irritation + 0.25, 0, 1);
+            if (mood.irritation >= MOOD.annoyedAt) delta -= 0.05;
+        } else {
+            mood.irritation = Math.max(0, mood.irritation - 0.15);
+        }
+
+        mood.value += delta;
+        mood.since = 0;
+        moodCommit(type);
+
+        if (type === 'poke' && mood.armed && mood.irritation >= MOOD.annoyedAt) {
+            mood.armed = false;
+            moodEmit('annoyed', { irritation: mood.irritation, happiness: mood.value });
+        }
+        moodSave();
+    }
+
+    if (storageKey) {
+        try {
+            const raw = JSON.parse(localStorage.getItem(storageKey) ?? 'null');
+            if (raw && Number.isFinite(raw.value)) {
+                mood.value = clamp(raw.value, 0, 1);
+                mood.since = Number.isFinite(raw.since) ? Math.max(0, raw.since) : 0;
+                mood.irritation = Number.isFinite(raw.irritation) ? clamp(raw.irritation, 0, 1) : 0;
+                const away = Number.isFinite(raw.saved) ? (Date.now() - raw.saved) / 60000 : 0;
+                moodAdvance(clamp(away, 0, MOOD.maxAwayMin));
+            }
+        } catch { }
+    }
+    mood.value = clamp(mood.value, 0, 1);
+    mood.level = moodResolveLevel(mood.value, 0);
+
+    function moodSnapshot() {
+        return {
+            happiness: Math.round(mood.value * 100) / 100,
+            level: MOOD_LEVELS[mood.level],
+            irritation: Math.round(mood.irritation * 100) / 100,
+            minutesSinceInteraction: Math.round(mood.since),
+            lonely: mood.since > MOOD.lonelyAfterMin,
+            annoyed: mood.irritation >= MOOD.annoyedAt,
+        };
+    }
+
+    function moodDescribe(lang = 'id') {
+        const en = lang === 'en';
+        let text = (MOOD_TEXT[lang] ?? MOOD_TEXT.id)[MOOD_LEVELS[mood.level]];
+        if (mood.since > MOOD.lonelyAfterMin) {
+            text += en
+                ? `; the user has not interacted with you for ${spanText(mood.since, true)}`
+                : `; sudah ${spanText(mood.since, false)} pengguna tidak berinteraksi denganmu`;
+        }
+        if (mood.irritation >= MOOD.annoyedAt) {
+            text += en ? '; annoyed from being poked too much' : '; kesal karena terlalu sering dicolek';
+        }
+        return text;
+    }
+
     const state = {
         mood: 'IDLE',
         moodTimer: 0,
@@ -38,13 +210,18 @@ export function setupInteraction(model, options = {}) {
         lastMouseY: -1,
         idleTotal: 0,
         wasTalking: false,
-        
+
+        happiness: mood.value,
+        droop: 0,
+        joy: 0,
+        energy: 1,
+
         glancesLeft: 0,
         glanceHold: 0,
         lastGlance: { x: 0, y: 0 },
-        
+
         target: { x: 0, y: 0 },
-        headTarget: { x: 0, y: 0 }, 
+        headTarget: { x: 0, y: 0 },
         headPending: null,
         headDelay: 0,
         eyes: { x: 0, y: 0 },
@@ -54,19 +231,19 @@ export function setupInteraction(model, options = {}) {
         jitter: { x: 0, y: 0, timer: rand(0.4, 1.2) },
         tilt: 0,
         tiltTarget: 0,
-        
+
         blinkWait: rand(2.5, 5),
         blinkProgress: -1,
         blinkDur: 0.16,
         blinkChain: false,
         blinkIsSecond: false,
         lid: 1,
-        
+
         yawn: { active: false, t: 0, delay: -1, level: 0 },
-        
+
         brow: 0,
         mouthForm: 0,
-        
+
         breathPhase: 0,
         breathPeriod: 3.5,
     };
@@ -74,8 +251,10 @@ export function setupInteraction(model, options = {}) {
     const YAWN = { up: 0.5, hold: 0.7, down: 0.8 };
     const YAWN_TOTAL = YAWN.up + YAWN.hold + YAWN.down;
 
-    function enter(mood, duration = 0) {
-        state.mood = mood;
+    const restY = () => state.droop * 0.35;
+
+    function enter(moodName, duration = 0) {
+        state.mood = moodName;
         state.moodTimer = 0;
         state.moodDuration = duration;
     }
@@ -101,7 +280,7 @@ export function setupInteraction(model, options = {}) {
         }
     }
 
-    const off = window.electronAPI.onGlobalMouse((data) => {
+    const off = window.electronAPI?.onGlobalMouse?.((data) => {
         if (Math.abs(data.mouseX - state.lastMouseX) <= 2 && Math.abs(data.mouseY - state.lastMouseY) <= 2) return;
 
         const centerX = data.winX + window.innerWidth / 2;
@@ -146,14 +325,19 @@ export function setupInteraction(model, options = {}) {
         state.glanceHold = quick ? rand(0.6, 1.0) : rand(1.5, 2.8);
         state.tiltTarget = (!quick && Math.random() < 0.5) ? TILT_SIGN * Math.sign(gx) * rand(5, 10) : 0;
 
-        lookAt(gx, gy, { speed: SPEED.CURIOUS, headDelay: rand(0.1, 0.28), headFollow: rand(0.6, 1.0) });
+        const calm = 1 - 0.5 * state.droop;
+        lookAt(gx * calm, gy * calm + restY(), {
+            speed: SPEED.CURIOUS,
+            headDelay: rand(0.1, 0.28),
+            headFollow: rand(0.6, 1.0),
+        });
         blinkSoon(0.5);
     }
 
     function finishCurious() {
         enter('IDLE', rand(4, 6));
         state.tiltTarget = 0;
-        if (Math.random() < 0.5) lookAt(0, 0, { speed: SPEED.IDLE, headDelay: 0.15 });
+        if (Math.random() < 0.5 || state.droop > 0.3) lookAt(0, restY(), { speed: SPEED.IDLE, headDelay: 0.15 });
     }
 
     function startSleepy() {
@@ -164,7 +348,7 @@ export function setupInteraction(model, options = {}) {
 
     function wakeUp() {
         enter('IDLE', rand(4, 6));
-        lookAt(0, 0, { speed: SPEED.IDLE });
+        lookAt(0, restY(), { speed: SPEED.IDLE });
         blinkSoon(1);
     }
 
@@ -180,6 +364,11 @@ export function setupInteraction(model, options = {}) {
                 state.headPending = null;
             }
         }
+
+        state.happiness = damp(state.happiness, mood.value, 1.5, dt);
+        state.droop = clamp((0.4 - state.happiness) / 0.4, 0, 1);
+        state.joy = clamp((state.happiness - 0.7) / 0.3, 0, 1);
+        state.energy = 0.8 + 0.4 * state.happiness;
 
         if (talking) {
             state.yawn.active = false;
@@ -208,14 +397,16 @@ export function setupInteraction(model, options = {}) {
                 if (state.moodTimer > state.moodDuration) {
                     const roll = Math.random();
                     const canSleep = state.idleTotal > sleepyThreshold;
-                    const sleepChance = isNightTime ? 0.7 : 0.4;
 
-                    if (roll < (canSleep ? 0.4 : 0.6)) {
+                    const pCurious = clamp((canSleep ? 0.4 : 0.6) * (0.55 + 0.6 * state.happiness), 0.15, 0.75);
+                    const pSleepy = isNightTime ? 0.3 : 0.2;
+
+                    if (roll < pCurious) {
                         startCurious();
-                    } else if (canSleep && roll < (canSleep ? sleepChance : 0.7)) {
+                    } else if (canSleep && roll < pCurious + pSleepy) {
                         startSleepy();
                     } else {
-                        lookAt(0, 0, { speed: SPEED.IDLE });
+                        lookAt(0, restY(), { speed: SPEED.IDLE });
                         enter('IDLE', rand(4, 6));
                     }
                 }
@@ -264,19 +455,26 @@ export function setupInteraction(model, options = {}) {
         if (state.mood === 'CURIOUS') browGoal = 0.5;
         else if (state.mood === 'SLEEPY') browGoal = -0.4;
         browGoal += 0.4 * state.yawn.level;
+        browGoal += (state.happiness - 0.5) * 0.8;
 
         state.brow = damp(state.brow, browGoal, 5, dt);
         set('ParamBrowLY', state.brow);
         set('ParamBrowRY', state.brow);
 
-        let mouthGoal = 0.1;
-        if (state.mood === 'FOCUS') mouthGoal = 0.2;
-        else if (state.mood === 'SLEEPY') mouthGoal = 0.4;
+        let mouthGoal = (state.happiness * 2) - 1;
+        if (state.mood === 'FOCUS') mouthGoal += 0.2;
+        else if (state.mood === 'SLEEPY') mouthGoal = -0.2;
+
+        mouthGoal = clamp(mouthGoal, -1, 1);
         state.mouthForm = damp(state.mouthForm, mouthGoal, 3, dt);
 
         if (!talking) {
             set('ParamMouthForm', clamp(state.mouthForm - 0.6 * state.yawn.level, -1, 1));
             if (state.yawn.level > 0.001) set('ParamMouthOpenY', state.yawn.level * 0.9);
+        }
+
+        if (hasCheek) {
+            set('ParamCheek', clamp(state.joy * 0.7, 0, 1));
         }
     }
 
@@ -307,7 +505,9 @@ export function setupInteraction(model, options = {}) {
             }
         }
 
-        const lidGoal = sleepy ? 0.35 : 1;
+        let lidGoal = sleepy ? 0.35 : 1;
+        if (state.happiness < 0.4) lidGoal = 0.7;
+
         state.lid = damp(state.lid, lidGoal, lidGoal > state.lid ? 6 : 2.5, dt);
 
         const blinkFactor = state.blinkProgress >= 0 ? 1 - Math.sin(state.blinkProgress * Math.PI) : 1;
@@ -316,9 +516,21 @@ export function setupInteraction(model, options = {}) {
 
         set('ParamEyeLOpen', eyeOpen);
         set('ParamEyeROpen', eyeOpen);
+
+        if (hasEyeSmile) {
+            const eyeSmile = clamp((state.happiness - 0.6) * 2, 0, 1);
+            set('ParamEyeLSmile', eyeSmile);
+            set('ParamEyeRSmile', eyeSmile);
+        }
     }
 
     function update() {
+        const wall = Date.now();
+        moodAdvance(clamp((wall - mood.lastWall) / 60000, 0, MOOD.maxAwayMin));
+        mood.lastWall = wall;
+        moodCommit('time');
+        if (wall - mood.lastSave > 30000) moodSave();
+
         const now = performance.now();
         const dt = Math.min((now - state.lastNow) / 1000, 0.05);
         state.lastNow = now;
@@ -340,20 +552,22 @@ export function setupInteraction(model, options = {}) {
             state.jitter.timer = rand(0.4, 1.2);
         }
 
-        state.eyes.x = damp(state.eyes.x, state.target.x + state.jitter.x, state.speed.eyes, dt);
-        state.eyes.y = damp(state.eyes.y, state.target.y + state.jitter.y, state.speed.eyes, dt);
-        state.head.x = damp(state.head.x, state.headTarget.x, state.speed.head, dt);
-        state.head.y = damp(state.head.y, state.headTarget.y, state.speed.head, dt);
-        state.body.x = damp(state.body.x, state.headTarget.x, state.speed.body, dt);
-        state.body.y = damp(state.body.y, state.headTarget.y, state.speed.body, dt);
+        const e = state.energy;
+        state.eyes.x = damp(state.eyes.x, state.target.x + state.jitter.x, state.speed.eyes * e, dt);
+        state.eyes.y = damp(state.eyes.y, state.target.y + state.jitter.y, state.speed.eyes * e, dt);
+        state.head.x = damp(state.head.x, state.headTarget.x, state.speed.head * e, dt);
+        state.head.y = damp(state.head.y, state.headTarget.y, state.speed.head * e, dt);
+        state.body.x = damp(state.body.x, state.headTarget.x, state.speed.body * e, dt);
+        state.body.y = damp(state.body.y, state.headTarget.y, state.speed.body * e, dt);
         state.tilt = damp(state.tilt, state.tiltTarget, 3, dt);
 
-        const sway = Math.sin(state.time * 0.6) * 1.5;
+        const sway = Math.sin(state.time * 0.6) * 1.5 * (1 + 0.8 * state.joy);
         const nod = Math.sin(state.time * 1.2) * 1.0;
         const yawnBack = 5 * state.yawn.level;
+        const slump = 6 * state.droop;
 
         set('ParamAngleX', clamp(state.head.x * 30, -30, 30));
-        set('ParamAngleY', clamp(-state.head.y * 30 + yawnBack, -30, 30));
+        set('ParamAngleY', clamp(-state.head.y * 30 + yawnBack - slump, -30, 30));
         set('ParamAngleZ', clamp(-state.head.x * state.head.y * 10 + sway + nod + state.tilt, -30, 30));
 
         set('ParamEyeBallX', clamp(state.eyes.x, -1, 1));
@@ -363,7 +577,7 @@ export function setupInteraction(model, options = {}) {
         set('ParamBodyAngleY', clamp(-state.body.y * 5, -5, 5));
         set('ParamBodyAngleZ', clamp(-state.body.x * 4 + sway * 0.5 + state.tilt * 0.3, -10, 10));
 
-        const periodGoal = state.mood === 'SLEEPY' ? 5.0 : 3.5;
+        const periodGoal = (state.mood === 'SLEEPY' ? 5.0 : 3.5) + 0.8 * state.droop;
         state.breathPeriod = damp(state.breathPeriod, periodGoal, 1, dt);
         state.breathPhase += dt / state.breathPeriod;
         set('ParamBreath', Math.sin(state.breathPhase * Math.PI * 2) * 0.5 + 0.5);
@@ -371,8 +585,34 @@ export function setupInteraction(model, options = {}) {
 
     internal.on('beforeModelUpdate', update);
 
-    return function cleanup() {
-        internal.off('beforeModelUpdate', update);
-        if (typeof off === 'function') off();
+    let disposed = false;
+    return {
+        event: moodEvent,
+        getMood: () => mood.value,
+        snapshot: moodSnapshot,
+        describe: moodDescribe,
+        onLevel(fn) {
+            moodListeners.level.push(fn);
+            return () => { moodListeners.level = moodListeners.level.filter((f) => f !== fn); };
+        },
+        onAnnoyed(fn) {
+            moodListeners.annoyed.push(fn);
+            return () => { moodListeners.annoyed = moodListeners.annoyed.filter((f) => f !== fn); };
+        },
+        setMood(value) { mood.value = clamp(value, 0, 1); moodCommit('debug'); moodSave(); },
+        simulate(minutes) { moodAdvance(minutes); moodCommit('time'); moodSave(); },
+        reset() {
+            mood.value = MOOD.baseline; mood.since = 0; mood.irritation = 0; mood.armed = true;
+            moodCommit('reset'); moodSave();
+        },
+        dispose() {
+            if (disposed) return;
+            disposed = true;
+            moodSave();
+            moodListeners.level = [];
+            moodListeners.annoyed = [];
+            try { internal.off('beforeModelUpdate', update); } catch { }
+            if (typeof off === 'function') off();
+        },
     };
 }
