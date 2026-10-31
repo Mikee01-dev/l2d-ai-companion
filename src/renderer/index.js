@@ -3,7 +3,7 @@ import { Live2DModel } from '@jannchie/pixi-live2d-display/cubism4';
 import { setupInteraction } from './interactions.js';
 import { setupChatUI } from './ui/chat.js';
 import { animateMouth, getTalkLevel } from './ai/mouth.js';
-import { createConversation, getGreeting } from './ai/brain.js';
+import { createConversation, getGreeting, pickSpontaneousKind } from './ai/brain.js';
 import { createReactions, getReactionLine } from './ai/reactions.js';
 
 import './style.css';
@@ -12,6 +12,8 @@ window.PIXI = PIXI;
 let model = null;
 let reactions = null;
 let loadToken = 0;
+let interactionController = null;
+let chatBusy = false; 
 
 const modelSettings = {
     scale: 1.0,
@@ -51,7 +53,7 @@ function positionModel() {
 
     model.scale.set(1);
     const baseScale = Math.min(w / model.width, h / model.height);
-    
+
     model.scale.set(baseScale * 1.4 * modelSettings.scale);
     model.anchor.set(0.5, 0.5);
     model.position.set(w / 2, (h / 2) + modelSettings.offsetY);
@@ -61,6 +63,8 @@ async function loadCharacter(gender) {
     const token = ++loadToken;
     try {
         cancelPress();
+        interactionController?.dispose();
+        interactionController = null;
         reactions?.dispose();
         reactions = null;
         if (model) {
@@ -85,9 +89,11 @@ async function loadCharacter(gender) {
 
         model.eventMode = 'none';
 
-        setupInteraction(model, {
-            getTalk: () => getTalkLevel(model)
+        interactionController = setupInteraction(model, {
+            getTalk: () => getTalkLevel(model),
+            storageKey: gender === 'male' ? 'mike_mood' : 'kei_mood',
         });
+        bindMoodReactions(interactionController);
 
         reactions = createReactions(model, {
             getTalk: () => getTalkLevel(model)
@@ -118,16 +124,136 @@ const conversation = createConversation({
     userName: appState.userName,
     getSettings: () => ({
         gender: appState.gender,
-        language: appState.language
+        language: appState.language,
+        moodText: interactionController?.describe(appState.language) ?? '',
     })
 });
 
 const chatUI = setupChatUI(async (userText) => {
-    chatUI.showBubble("...", 2000);
-    const aiReply = await conversation.send(userText);
-    chatUI.showBubble(aiReply, 6000);
-    animateMouth(model, aiReply.length * 70, aiReply);
+    chatBusy = true;
+    try {
+        chatUI.showBubble("...", 2000);
+
+        interactionController?.event('chat');
+
+        const aiReply = await conversation.send(userText);
+
+        chatUI.showBubble(aiReply, 6000);
+
+        const duration = aiReply.length * 70;
+        if (model) animateMouth(model, duration, aiReply);
+    } finally {
+        chatBusy = false;
+    }
 });
+
+const SPONT = {
+    firstDelaySec: 90,
+    minDelaySec: 180,
+    maxDelaySec: 480,
+    retrySec: [15, 40],
+    minGapSec: 60,
+    eventGapSec: 45,
+    pendingTries: 4,
+};
+
+let spontEnabled = true;
+let spontTimer = null;
+let spontInflight = false;
+let lastSpokeAt = 0;
+let pendingKind = null;
+let flushing = false;
+
+const randBetween = (a, b) => a + Math.random() * (b - a);
+
+function isBusy() {
+    if (chatBusy || press) return true;
+    const input = document.getElementById('chat-input');
+    if (input && input.value.trim()) return true;
+    try { if (model && getTalkLevel(model) > 0.25) return true; } catch {}
+    return false;
+}
+
+function speakLine(text) {
+    const ms = Math.min(9000, Math.max(3500, text.length * 90));
+    chatUI.showBubble(text, ms);
+    if (model) animateMouth(model, text.length * 70, text);
+}
+
+async function trySpeak(kind, { force = false, gapSec = SPONT.minGapSec } = {}) {
+    if (spontInflight) return 'blocked';
+    if (!force) {
+        if (!spontEnabled) return 'blocked';
+        if (Date.now() - lastSpokeAt < gapSec * 1000) return 'blocked';
+        if (isBusy() || document.hidden) return 'blocked';
+    }
+
+    const gender = appState.gender;
+    spontInflight = true;
+    try {
+        const text = await conversation.nudge(kind, {
+            accept: () => gender === appState.gender && (force || !isBusy()),
+        });
+        if (!text) return 'failed';
+        lastSpokeAt = Date.now();
+        speakLine(text);
+        return 'done';
+    } catch (err) {
+        console.warn('[spontan] gagal:', err);
+        return 'failed';
+    } finally {
+        spontInflight = false;
+    }
+}
+
+function scheduleSpontaneous(delaySec) {
+    clearTimeout(spontTimer);
+    if (!spontEnabled) return;
+
+    const mood = interactionController?.getMood() ?? 0.55;
+    const sec = delaySec ?? randBetween(SPONT.minDelaySec, SPONT.maxDelaySec) * (1.35 - 0.7 * mood);
+
+    spontTimer = setTimeout(async () => {
+        const snap = interactionController?.snapshot();
+        const result = snap
+            ? await trySpeak(pickSpontaneousKind({ level: snap.level, lonely: snap.lonely }))
+            : 'blocked';
+        scheduleSpontaneous(result === 'blocked' ? randBetween(...SPONT.retrySec) : undefined);
+    }, sec * 1000);
+}
+
+async function queueSpontaneous(kind) {
+    pendingKind = kind;
+    if (flushing) return;
+    flushing = true;
+    try {
+        for (let tries = SPONT.pendingTries; pendingKind && tries > 0; tries--) {
+            const result = await trySpeak(pendingKind, { gapSec: SPONT.eventGapSec });
+            if (result !== 'blocked') break;
+            await new Promise((r) => setTimeout(r, 5000));
+        }
+    } finally {
+        pendingKind = null;
+        flushing = false;
+    }
+}
+
+function bindMoodReactions(ctl) {
+    ctl.onLevel(({ next, direction }) => {
+        if (direction === 'down' && (next === 'low' || next === 'sad')) queueSpontaneous('mood_drop');
+        else if (direction === 'up' && (next === 'happy' || next === 'joyful') && Math.random() < 0.5) queueSpontaneous('mood_up');
+    });
+    ctl.onAnnoyed(() => queueSpontaneous('annoyed'));
+}
+
+window.__companion = {
+    get mood() { return interactionController; },
+    say: (kind = 'thought') => trySpeak(kind, { force: true }),
+    setSpontaneous(on) {
+        spontEnabled = Boolean(on);
+        if (spontEnabled) scheduleSpontaneous(); else clearTimeout(spontTimer);
+    },
+};
 
 setTimeout(async () => {
     const storageKey = appState.gender === 'male' ? 'mike_chat_history' : 'kei_chat_history';
@@ -138,11 +264,11 @@ setTimeout(async () => {
     if (hasHistory) {
         const aiReply = await conversation.send("(Sistem: Kamu baru saja menyala kembali. Sapa pengguna dengan hangat dan tanyakan kelanjutan obrolan terakhir.)");
         chatUI.showBubble(aiReply, 6000);
-        animateMouth(model, aiReply.length * 70, aiReply);
+        if (model) animateMouth(model, aiReply.length * 70, aiReply);
     } else {
         const aiGreeting = await conversation.send("(Sistem: Berikan sapaan pembuka yang singkat dan natural, sesuai dengan waktu saat ini.)");
         chatUI.showBubble(aiGreeting, 5000);
-        animateMouth(model, aiGreeting.length * 70, aiGreeting);
+        if (model) animateMouth(model, aiGreeting.length * 70, aiGreeting);
     }
 }, 2000);
 
@@ -172,53 +298,45 @@ sliderY.addEventListener('input', (e) => {
 const btnMale = document.getElementById('btn-male');
 const btnFemale = document.getElementById('btn-female');
 
-btnMale.addEventListener('click', async () => {
-    if (appState.gender === 'male') return;
-    appState.gender = 'male';
-    btnMale.classList.add('active');
-    btnFemale.classList.remove('active');
-    await loadCharacter('male');
-    const greeting = getGreeting({ gender: 'male', language: appState.language });
-    chatUI.showBubble(greeting, 3000);
-});
+async function switchPersona(gender) {
+    if (appState.gender === gender) return;
+    appState.gender = gender;
+    btnMale.classList.toggle('active', gender === 'male');
+    btnFemale.classList.toggle('active', gender === 'female');
 
-btnFemale.addEventListener('click', async () => {
-    if (appState.gender === 'female') return;
-    appState.gender = 'female';
-    btnFemale.classList.add('active');
-    btnMale.classList.remove('active');
-    await loadCharacter('female');
-    const greeting = getGreeting({ gender: 'female', language: appState.language });
+    pendingKind = null;
+    await loadCharacter(gender);
+
+    const greeting = getGreeting({ gender, language: appState.language });
     chatUI.showBubble(greeting, 3000);
-});
+}
+
+btnMale.addEventListener('click', () => switchPersona('male'));
+btnFemale.addEventListener('click', () => switchPersona('female'));
 
 const btnLangId = document.getElementById('btn-lang-id');
 const btnLangEn = document.getElementById('btn-lang-en');
 
-btnLangId.addEventListener('click', () => {
-    if (appState.language === 'id') return;
-    appState.language = 'id';
-    btnLangId.classList.add('active');
-    btnLangEn.classList.remove('active');
-    const greeting = getGreeting({ gender: appState.gender, language: 'id' });
-    chatUI.showBubble(greeting, 3000);
-});
+function switchLanguage(lang) {
+    if (appState.language === lang) return;
+    appState.language = lang;
+    btnLangId.classList.toggle('active', lang === 'id');
+    btnLangEn.classList.toggle('active', lang === 'en');
 
-btnLangEn.addEventListener('click', () => {
-    if (appState.language === 'en') return;
-    appState.language = 'en';
-    btnLangEn.classList.add('active');
-    btnLangId.classList.remove('active');
-    const greeting = getGreeting({ gender: appState.gender, language: 'en' });
+    const greeting = getGreeting({ gender: appState.gender, language: lang });
     chatUI.showBubble(greeting, 3000);
-});
+}
+
+btnLangId.addEventListener('click', () => switchLanguage('id'));
+btnLangEn.addEventListener('click', () => switchLanguage('en'));
 
 const HEAD_RATIO = 0.35;
 const INSET_X = 0.15;
 const STROKE_DIST = 25;
-const STROKE_HOLD_MS = 500;
+const STROKE_HOLD_MS = 500; 
 const TAP_MS = 400;
 const LEAN_RANGE = 60;
+const STROKE_MOOD_MS = 800;
 
 let press = null;
 let suppressNextClick = false;
@@ -262,6 +380,7 @@ function hitModel(e) {
 function startStroke(p) {
     if (!p || p.stroking || !reactions) return;
     p.stroking = true;
+    p.strokeStart = performance.now();
     p.ctx = reactions.play('stroke');
     react('stroke');
 }
@@ -282,8 +401,10 @@ function endPress() {
 
     if (p.stroking) {
         reactions.release('stroke');
+        if (performance.now() - p.strokeStart > STROKE_MOOD_MS) interactionController?.event('stroke');
     } else if (performance.now() - p.time < TAP_MS) {
         reactions.play('pat');
+        interactionController?.event('pat');
         react('pat');
     }
 }
@@ -299,11 +420,12 @@ canvasContainer.addEventListener('pointerdown', (e) => {
         ...hit,
         startX: e.clientX, lastX: e.clientX, lastY: e.clientY,
         time: performance.now(), dist: 0,
-        stroking: false, ctx: null, timer: null,
+        stroking: false, strokeStart: 0, ctx: null, timer: null,
     };
 
     if (hit.zone === 'body') {
         reactions.play('poke', { dir: hit.dir });
+        interactionController?.event('poke');
         react('poke');
     } else {
         const p = press;
@@ -343,6 +465,7 @@ const btnReset = document.getElementById('btn-reset-memory');
 if (btnReset) {
     btnReset.addEventListener('click', () => {
         conversation.reset();
+        interactionController?.reset();
         const charName = appState.gender === 'male' ? 'Mike' : 'Kei';
         const resetText = appState.language === 'en'
             ? `${charName}'s memory cleared. Let's start over!`
@@ -353,4 +476,5 @@ if (btnReset) {
 
 app.renderer.on('resize', positionModel);
 
-await loadCharacter('male');
+await loadCharacter(appState.gender);
+scheduleSpontaneous(SPONT.firstDelaySec);
