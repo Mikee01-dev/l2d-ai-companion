@@ -6,15 +6,34 @@ export function setupChatUI(onSendMessage) {
     const inputArea = document.getElementById('input-area');
     
     let bubbleTimer = null;
+    let typingTimer = null;
     let isInputOpen = false;
 
     function showBubble(text, duration = 5000) {
+        if (typingTimer) clearInterval(typingTimer);
+        
         bubbleText.textContent = text;
         speechBubble.classList.remove('hidden');
+        
         if (bubbleTimer) clearTimeout(bubbleTimer);
-        bubbleTimer = setTimeout(() => {
-            speechBubble.classList.add('hidden');
-        }, duration);
+        if (duration > 0) {
+            bubbleTimer = setTimeout(() => {
+                speechBubble.classList.add('hidden');
+            }, duration);
+        }
+    }
+
+    function showTyping() {
+        speechBubble.classList.remove('hidden');
+        let dots = 0;
+        if (typingTimer) clearInterval(typingTimer);
+        
+        if (bubbleTimer) clearTimeout(bubbleTimer);
+        
+        typingTimer = setInterval(() => {
+            dots = (dots + 1) % 4;
+            bubbleText.textContent = ".".repeat(dots) || " "; 
+        }, 400);
     }
 
     function toggleInput(show) {
@@ -43,5 +62,5 @@ export function setupChatUI(onSendMessage) {
         return isInputOpen;
     }
 
-    return { showBubble, toggleInput, getIsInputOpen };
+    return { showBubble, showTyping, toggleInput, getIsInputOpen };
 }
