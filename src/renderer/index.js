@@ -132,14 +132,13 @@ const conversation = createConversation({
 const chatUI = setupChatUI(async (userText) => {
     chatBusy = true;
     try {
-        chatUI.showBubble("...", 2000);
+        chatUI.showTyping(); 
 
         interactionController?.event('chat');
-
         const aiReply = await conversation.send(userText);
-
+        
         chatUI.showBubble(aiReply, 6000);
-
+        
         const duration = aiReply.length * 70;
         if (model) animateMouth(model, duration, aiReply);
     } finally {
