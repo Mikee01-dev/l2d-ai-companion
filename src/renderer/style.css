@@ -53,7 +53,9 @@ canvas {
 
   filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.28));
   animation: bubble-pop 0.28s cubic-bezier(0.34, 1.56, 0.64, 1);
-  transition: opacity 0.25s ease, transform 0.25s ease;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
 }
 
 #speech-bubble::after {
@@ -73,9 +75,9 @@ canvas {
   letter-spacing: 3px;
 }
 
-.hidden {
+#speech-bubble.hidden {
   opacity: 0 !important;
-  transform: translate(-50%, 8px) scale(0.96) !important;
+  transform: translateX(-50%) translateY(8px) scale(0.96) !important;
   pointer-events: none;
 }
 
