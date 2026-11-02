@@ -11,7 +11,6 @@ Unlike typical "AI waifu" projects, this companion is designed to be **universal
 - [x] LLM integration (Groq API) with context-aware conversation.
 - [x] Multi-persona (Male / Female) & Multi-language (ID / EN).
 - [x] Chat UI with speech bubbles.
-- [ ] TTS (Text-to-Speech) integration (In Progress).
 - [ ] Long-term memory (Coming soon).
 
 ## Tech Stack
