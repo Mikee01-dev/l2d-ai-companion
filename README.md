@@ -1,7 +1,6 @@
 # L2D AI Companion
 
 A lightweight, transparent desktop companion powered by **Live2D** and **LLM**. 
-Unlike typical "AI waifu" projects, this companion is designed to be **universal**—featuring a custom-rigged character, multi-language support, and dynamic personality switching.
 
 ## Features
 - [x] Transparent Electron window (always on top).
