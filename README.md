@@ -56,11 +56,6 @@ This project supports multiple personas:
 
 *(Note: You can easily add new personas by editing `src/renderer/ai/brain.js`)*
 
-## Roadmap
-- **Week 1:** Foundation & Visual (Electron, PixiJS, Live2D, Behaviors).
-- **Week 2:** Brain & Voice (LLM, Chat UI, TTS, Lip-sync).
-- **Week 3:** Memory & Polish (Long-term memory, UI Settings, System Tray).
-
 ## License
 The code is MIT licensed. 
 **Note:** The Live2D model assets are **NOT** included in this repository. Please use your own model or ensure you have the proper license for any third-party models.
